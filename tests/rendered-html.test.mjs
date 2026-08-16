@@ -1,24 +1,70 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import { access, readFile, readdir } from "node:fs/promises";
-import test from "node:test";
+import { fileURLToPath } from "node:url";
+import test, { after, before } from "node:test";
 
-async function requestApp(path = "/", init) {
-  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
-  workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
-  const { default: worker } = await import(workerUrl.href);
+const projectRoot = fileURLToPath(new URL("../", import.meta.url));
+const nextCli = fileURLToPath(
+  new URL("../node_modules/next/dist/bin/next", import.meta.url),
+);
+const testPort = 31_000 + (process.pid % 1_000);
+const baseUrl = `http://127.0.0.1:${testPort}`;
+let server;
+let serverOutput = "";
 
-  return worker.fetch(
-    new Request(`http://localhost${path}`, init),
+before(async () => {
+  server = spawn(
+    process.execPath,
+    [nextCli, "start", "-H", "127.0.0.1", "-p", String(testPort)],
     {
-      ASSETS: {
-        fetch: async () => new Response("Not found", { status: 404 }),
+      cwd: projectRoot,
+      env: {
+        ...process.env,
+        NODE_ENV: "production",
+        NEXT_TELEMETRY_DISABLED: "1",
       },
-    },
-    {
-      waitUntil() {},
-      passThroughOnException() {},
+      stdio: ["ignore", "pipe", "pipe"],
     },
   );
+
+  server.stdout.on("data", (chunk) => {
+    serverOutput += chunk;
+  });
+  server.stderr.on("data", (chunk) => {
+    serverOutput += chunk;
+  });
+
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    if (server.exitCode !== null) {
+      throw new Error(`Next.js exited before becoming ready.\n${serverOutput}`);
+    }
+
+    try {
+      const response = await fetch(baseUrl, { redirect: "manual" });
+      if (response.status > 0) return;
+    } catch {
+      // The server is still starting.
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+
+  throw new Error(`Timed out waiting for Next.js.\n${serverOutput}`);
+}, { timeout: 35_000 });
+
+after(async () => {
+  if (!server || server.exitCode !== null) return;
+  server.kill();
+  await Promise.race([
+    new Promise((resolve) => server.once("exit", resolve)),
+    new Promise((resolve) => setTimeout(resolve, 2_000)),
+  ]);
+});
+
+async function requestApp(path = "/", init) {
+  return fetch(`${baseUrl}${path}`, init);
 }
 
 async function collectTextFiles(directory) {
@@ -174,6 +220,9 @@ test("keeps the Planify implementation accessible and starter-free", async () =>
   assert.match(packageJson, /"@clerk\/backend"/);
   assert.match(packageJson, /"@clerk\/react"/);
   assert.match(packageJson, /"@supabase\/supabase-js"/);
+  assert.match(packageJson, /"next": "16\.2\.6"/);
+  assert.match(packageJson, /"build": "next build"/);
+  assert.doesNotMatch(packageJson, /vinext|wrangler|@cloudflare\/vite-plugin/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
   assert.doesNotMatch(page, /SkeletonPreview|Student or parent/);
 
@@ -255,15 +304,14 @@ test("early-access API rejects unsafe input without contacting Supabase", async 
     method: "POST",
     headers: {
       "content-type": "application/json",
-      "content-length": "9000",
     },
-    body: "{}",
+    body: JSON.stringify({ payload: "x".repeat(9_000) }),
   });
   assert.equal(tooLarge.status, 413);
 });
 
 test("server-only Clerk and Supabase secrets are absent from the client build", async () => {
-  const clientOutput = await collectTextFiles(new URL("../dist/client/", import.meta.url));
+  const clientOutput = await collectTextFiles(new URL("../.next/static/", import.meta.url));
   assert.doesNotMatch(clientOutput, /CLERK_SECRET_KEY|SUPABASE_SECRET_KEY/);
 
   try {
