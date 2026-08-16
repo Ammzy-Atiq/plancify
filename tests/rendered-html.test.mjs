@@ -1,0 +1,242 @@
+import assert from "node:assert/strict";
+import { access, readFile, readdir } from "node:fs/promises";
+import test from "node:test";
+
+async function requestApp(path = "/", init) {
+  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
+  workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
+  const { default: worker } = await import(workerUrl.href);
+
+  return worker.fetch(
+    new Request(`http://localhost${path}`, init),
+    {
+      ASSETS: {
+        fetch: async () => new Response("Not found", { status: 404 }),
+      },
+    },
+    {
+      waitUntil() {},
+      passThroughOnException() {},
+    },
+  );
+}
+
+async function collectTextFiles(directory) {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const files = await Promise.all(
+    entries.map(async (entry) => {
+      const path = new URL(`${entry.name}${entry.isDirectory() ? "/" : ""}`, directory);
+      if (entry.isDirectory()) return collectTextFiles(path);
+      if (!/\.(?:js|css|html|map)$/i.test(entry.name)) return "";
+      return readFile(path, "utf8");
+    }),
+  );
+  return files.flat(Infinity).join("\n");
+}
+
+test("server-renders the complete Planify landing page", async () => {
+  const response = await requestApp("/", {
+    headers: { accept: "text/html" },
+  });
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
+
+  const html = await response.text();
+  assert.match(html, /<title>Planify — Discover\. Try\. Reflect\. Plan\.<\/title>/i);
+  assert.match(html, /Your future isn’t a test result\./);
+  assert.match(html, /Clarity is built, not delivered\./);
+  assert.match(html, /id="how-it-works"/);
+  assert.match(html, /id="roadmap"/);
+  assert.match(html, /id="early-access"/);
+  assert.match(html, /class="theme-toggle"/);
+  assert.match(html, /class="auth-trigger/);
+  assert.match(html, /aria-label="Sign in to Planify"/);
+  assert.match(html, /class="interest-form"/);
+  assert.match(html, /Join early access/);
+  assert.match(html, /Switch to dark theme/);
+  assert.doesNotMatch(html, /data-left-dock-card|data-impact-card|data-sequence-group/);
+  assert.match(html, /property="og:image"/);
+  assert.match(html, /\/og\.png/);
+  assert.doesNotMatch(html, /react-loading-skeleton|Building your site/i);
+  assert.doesNotMatch(html, /Nothing was sent or stored|Interactive demo only/i);
+  assert.doesNotMatch(html, /[↗→↓←↑↘↙]/);
+});
+
+test("keeps the Planify implementation accessible and starter-free", async () => {
+  const [
+    css,
+    page,
+    layout,
+    packageJson,
+    route,
+    authProvider,
+    authControl,
+    initialMigration,
+    clerkIdentityMigration,
+    envExample,
+  ] = await Promise.all([
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../package.json", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/early-access/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/auth-provider.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/auth-control.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260817_create_early_access_signups.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260818_add_clerk_user_identity.sql", import.meta.url), "utf8"),
+    readFile(new URL("../.env.example", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(page, /role="progressbar"/);
+  assert.match(page, /aria-live="polite"/);
+  assert.match(page, /Parent or guardian/);
+  assert.match(page, /prefers-reduced-motion: reduce/);
+  assert.match(page, /data-motion-card/);
+  assert.match(page, /data-sky-card/);
+  assert.match(page, /className="truth-grid" data-reveal data-group-reveal/);
+  assert.match(page, /className="loop-grid" data-reveal data-group-reveal/);
+  assert.match(page, /className="roadmap-track" data-reveal data-group-reveal/);
+  assert.doesNotMatch(
+    page,
+    /data-impact-card|data-left-dock-card|data-sequence-group|impact-burst|finishSequenceGroup/,
+  );
+  assert.match(page, /planify-theme/);
+  assert.match(page, /fetch\("\/api\/early-access"/);
+  assert.match(page, /type="submit"/);
+  assert.match(layout, /<AuthProvider>\{children\}<\/AuthProvider>/);
+  assert.match(authProvider, /ClerkProvider/);
+  assert.match(authProvider, /useAuth\(\)/);
+  assert.match(authProvider, /NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY/);
+  assert.match(authProvider, /getToken:\s*async/);
+  assert.match(authControl, /<Show when="signed-out">/);
+  assert.match(authControl, /<SignInButton mode="modal">/);
+  assert.match(authControl, /<Show when="signed-in">/);
+  assert.match(authControl, /<UserButton/);
+  assert.doesNotMatch(authProvider + authControl, /signInWithOtp|onAuthStateChange/);
+  assert.doesNotMatch(page + authControl, /[↗→↓←↑↘↙]/);
+  assert.match(route, /SUPABASE_SECRET_KEY/);
+  assert.match(route, /createClerkClient/);
+  assert.match(route, /CLERK_SECRET_KEY/);
+  assert.match(route, /CLERK_AUTHORIZED_PARTIES/);
+  assert.match(route, /authenticateRequest\(request/);
+  assert.match(route, /acceptsToken:\s*"session_token"/);
+  assert.match(route, /requestState\.toAuth\(\)/);
+  assert.match(route, /clerk\.users\.getUser\(userId\)/);
+  assert.match(route, /verifiedEmail === email \? userId : null/);
+  assert.doesNotMatch(route, /supabase\.auth\.|auth\.getUser\(token\)/);
+  assert.doesNotMatch(
+    page + authProvider + authControl,
+    /CLERK_SECRET_KEY|SUPABASE_SECRET_KEY|sk_(?:test|live)_|sb_secret_/,
+  );
+  assert.match(initialMigration, /clerk_user_id text/i);
+  assert.match(initialMigration, /enable row level security/i);
+  assert.match(initialMigration, /revoke all.+anon, authenticated/is);
+  assert.match(initialMigration, /unique \(email, audience\)/i);
+  assert.match(clerkIdentityMigration, /add column if not exists clerk_user_id text/i);
+  assert.match(clerkIdentityMigration, /early_access_clerk_user_id_length/i);
+  assert.match(clerkIdentityMigration, /early_access_signups_clerk_user_idx/i);
+  assert.match(envExample, /NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_your_publishable_key/);
+  assert.match(envExample, /CLERK_SECRET_KEY=sk_test_your_server_only_key/);
+  assert.match(envExample, /CLERK_AUTHORIZED_PARTIES=http:\/\/localhost:3000/);
+  assert.match(envExample, /SUPABASE_URL=https:\/\/your-project\.supabase\.co/);
+  assert.match(envExample, /SUPABASE_SECRET_KEY=sb_secret_your_server_only_key/);
+  assert.doesNotMatch(envExample, /NEXT_PUBLIC_SUPABASE_/);
+  assert.match(css, /:focus-visible/);
+  assert.match(css, /prefers-reduced-motion:\s*reduce/);
+  assert.match(css, /@keyframes sky-land/);
+  assert.match(css, /@keyframes clean-group-rise/);
+  assert.doesNotMatch(css, /sequence-scroll-locked/);
+  assert.doesNotMatch(css, /tech-scan/);
+  assert.match(css, /html\[data-theme="dark"\]/);
+  assert.doesNotMatch(css, /(?:linear|radial|conic)-gradient\s*\(/i);
+  assert.match(layout, /generateMetadata/);
+  assert.match(layout, /\/og\.png/);
+  assert.match(packageJson, /"@clerk\/backend"/);
+  assert.match(packageJson, /"@clerk\/react"/);
+  assert.match(packageJson, /"@supabase\/supabase-js"/);
+  assert.doesNotMatch(packageJson, /react-loading-skeleton/);
+  assert.doesNotMatch(page, /SkeletonPreview|Student or parent/);
+
+  await assert.rejects(
+    access(new URL("../app/_sites-preview/", import.meta.url)),
+  );
+  await access(new URL("../public/og.png", import.meta.url));
+});
+
+test("early-access API rejects unsafe input without contacting Supabase", async () => {
+  const unsupported = await requestApp("/api/early-access", {
+    method: "POST",
+    body: "email=test@example.com",
+  });
+  assert.equal(unsupported.status, 415);
+  assert.equal(unsupported.headers.get("cache-control"), "no-store");
+
+  const invalidAudience = await requestApp("/api/early-access", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: "test@example.com", audience: "student" }),
+  });
+  assert.equal(invalidAudience.status, 400);
+
+  const crossOrigin = await requestApp("/api/early-access", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      origin: "https://untrusted.example",
+    },
+    body: JSON.stringify({ email: "test@example.com", audience: "family" }),
+  });
+  assert.equal(crossOrigin.status, 403);
+
+  const nonObject = await requestApp("/api/early-access", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "null",
+  });
+  assert.equal(nonObject.status, 400);
+
+  const missingSchool = await requestApp("/api/early-access", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: "test@example.com", audience: "school" }),
+  });
+  assert.equal(missingSchool.status, 400);
+
+  const oversizedSchool = await requestApp("/api/early-access", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      email: "test@example.com",
+      audience: "school",
+      schoolName: "s".repeat(161),
+    }),
+  });
+  assert.equal(oversizedSchool.status, 400);
+
+  const tooLarge = await requestApp("/api/early-access", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "content-length": "9000",
+    },
+    body: "{}",
+  });
+  assert.equal(tooLarge.status, 413);
+});
+
+test("server-only Clerk and Supabase secrets are absent from the client build", async () => {
+  const clientOutput = await collectTextFiles(new URL("../dist/client/", import.meta.url));
+  assert.doesNotMatch(clientOutput, /CLERK_SECRET_KEY|SUPABASE_SECRET_KEY/);
+
+  try {
+    const localEnvironment = await readFile(new URL("../.env.local", import.meta.url), "utf8");
+    for (const variable of ["CLERK_SECRET_KEY", "SUPABASE_SECRET_KEY"]) {
+      const secret = localEnvironment
+        .match(new RegExp(`^${variable}=(.+)$`, "m"))?.[1]
+        ?.trim();
+      if (secret) assert.equal(clientOutput.includes(secret), false, `${variable} leaked into the client build`);
+    }
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
+});
