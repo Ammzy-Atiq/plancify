@@ -57,8 +57,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           borderRadius: "0.9rem",
           colorBackground: "#ffffff",
           colorPrimary: "#4e55bb",
-          colorText: "#111512",
-          colorTextSecondary: "#4f5951",
+          colorForeground: "#111512",
+          colorMutedForeground: "#4f5951",
           fontFamily:
             "ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
         },
