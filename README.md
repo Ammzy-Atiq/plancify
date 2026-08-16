@@ -34,6 +34,19 @@ Before production, rotate any server key that has been shared in chat or another
 
 The header mounts Clerk's modal sign-in and account controls. When a signed-in visitor submits the early-access form, the browser attaches a short-lived Clerk session token. The API verifies that token with `@clerk/backend`, checks it against `CLERK_AUTHORIZED_PARTIES`, and associates the Clerk user ID only when the account's primary email matches the submitted email. Anonymous enquiries are still accepted.
 
+## Admin panel
+
+The private admin panel is available at `http://localhost:3000/admin`. It shows the saved email, audience, school name, account connection, and submission date, with search, audience filtering, totals, and a manual refresh action.
+
+Admin access uses a deny-by-default Clerk allowlist:
+
+1. Create or sign in to the Clerk account that should be the administrator.
+2. In **Clerk Dashboard → Users**, copy that account's User ID.
+3. Add it to `ADMIN_CLERK_USER_IDS` in `.env.local`. Multiple administrator IDs can be comma-separated.
+4. Restart the local site and open `/admin`.
+
+The browser never receives the Supabase secret or Clerk secret. The admin API verifies the Clerk session and administrator allowlist on every request, then returns a read-only list capped at 500 recent enquiries.
+
 Supabase authentication is not used. The API performs the database insert with the server-only Supabase secret, while row-level security and revoked `anon` and `authenticated` privileges prevent direct browser access to the table.
 
 Before exposing the endpoint publicly, add a durable edge rate limit or a managed challenge such as Cloudflare Turnstile. The local endpoint already enforces same-origin requests, strict validation, a body-size cap, and a honeypot, but those controls are not a substitute for production abuse protection.
@@ -57,3 +70,4 @@ node --test tests/rendered-html.test.mjs
 - Clerk modal sign-in, session-aware UI, and account management
 - Clerk session verification with an explicit authorized-party allowlist
 - A server-only Supabase write route with validation and duplicate-safe responses
+- A Clerk-protected, read-only admin panel for reviewing early-access enquiries

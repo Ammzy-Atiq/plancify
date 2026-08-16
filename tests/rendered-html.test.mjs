@@ -71,6 +71,10 @@ test("keeps the Planify implementation accessible and starter-free", async () =>
     route,
     authProvider,
     authControl,
+    adminPage,
+    adminLayout,
+    adminRoute,
+    adminCss,
     initialMigration,
     clerkIdentityMigration,
     envExample,
@@ -82,6 +86,10 @@ test("keeps the Planify implementation accessible and starter-free", async () =>
     readFile(new URL("../app/api/early-access/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/components/auth-provider.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/auth-control.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/admin/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/admin/layout.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/admin/early-access/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/admin/admin.module.css", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260817_create_early_access_signups.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260818_add_clerk_user_identity.sql", import.meta.url), "utf8"),
     readFile(new URL("../.env.example", import.meta.url), "utf8"),
@@ -114,6 +122,17 @@ test("keeps the Planify implementation accessible and starter-free", async () =>
   assert.match(authControl, /<UserButton/);
   assert.doesNotMatch(authProvider + authControl, /signInWithOtp|onAuthStateChange/);
   assert.doesNotMatch(page + authControl, /[↗→↓←↑↘↙]/);
+  assert.match(adminPage, /fetch\("\/api\/admin\/early-access"/);
+  assert.match(adminPage, /Search email or school/);
+  assert.match(adminPage, /Every enquiry, in one clear view/);
+  assert.match(adminLayout, /index:\s*false/);
+  assert.match(adminLayout, /images:\s*\[\]/);
+  assert.match(adminRoute, /ADMIN_CLERK_USER_IDS/);
+  assert.match(adminRoute, /authenticateRequest\(request/);
+  assert.match(adminRoute, /\.select\("id,email,audience,school_name,source,clerk_user_id,created_at"\)/);
+  assert.match(adminRoute, /\.limit\(500\)/);
+  assert.doesNotMatch(adminPage + adminCss, /CLERK_SECRET_KEY|SUPABASE_SECRET_KEY|sb_secret_|sk_(?:test|live)_/);
+  assert.doesNotMatch(adminCss, /(?:linear|radial|conic)-gradient\s*\(/i);
   assert.match(route, /SUPABASE_SECRET_KEY/);
   assert.match(route, /createClerkClient/);
   assert.match(route, /CLERK_SECRET_KEY/);
@@ -138,6 +157,7 @@ test("keeps the Planify implementation accessible and starter-free", async () =>
   assert.match(envExample, /NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_your_publishable_key/);
   assert.match(envExample, /CLERK_SECRET_KEY=sk_test_your_server_only_key/);
   assert.match(envExample, /CLERK_AUTHORIZED_PARTIES=http:\/\/localhost:3000/);
+  assert.match(envExample, /ADMIN_CLERK_USER_IDS=user_your_clerk_user_id/);
   assert.match(envExample, /SUPABASE_URL=https:\/\/your-project\.supabase\.co/);
   assert.match(envExample, /SUPABASE_SECRET_KEY=sb_secret_your_server_only_key/);
   assert.doesNotMatch(envExample, /NEXT_PUBLIC_SUPABASE_/);
@@ -161,6 +181,24 @@ test("keeps the Planify implementation accessible and starter-free", async () =>
     access(new URL("../app/_sites-preview/", import.meta.url)),
   );
   await access(new URL("../public/og.png", import.meta.url));
+});
+
+test("admin page is sign-in gated and its API rejects anonymous requests", async () => {
+  const pageResponse = await requestApp("/admin", {
+    headers: { accept: "text/html" },
+  });
+  assert.equal(pageResponse.status, 200);
+  const html = await pageResponse.text();
+  assert.match(html, /Checking your account|Sign in to open the admin panel/);
+  assert.match(html, /name="robots"/);
+  assert.match(html, /noindex/i);
+
+  const apiResponse = await requestApp("/api/admin/early-access", {
+    headers: { accept: "application/json" },
+  });
+  assert.equal(apiResponse.status, 401);
+  assert.equal(apiResponse.headers.get("cache-control"), "no-store");
+  assert.match(apiResponse.headers.get("vary") ?? "", /(?:^|,\s*)Authorization(?:,|$)/);
 });
 
 test("early-access API rejects unsafe input without contacting Supabase", async () => {

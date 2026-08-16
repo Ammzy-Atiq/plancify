@@ -1,6 +1,7 @@
 "use client";
 
 import { SignInButton } from "@clerk/react";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AuthControl } from "@/app/components/auth-control";
 import { usePlanifyAuth } from "@/app/components/auth-provider";
@@ -91,7 +92,8 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (!configured || !isLoaded || !isSignedIn) return;
-    void loadRecords();
+    const frame = window.requestAnimationFrame(() => void loadRecords());
+    return () => window.cancelAnimationFrame(frame);
   }, [configured, isLoaded, isSignedIn, loadRecords]);
 
   const filteredRecords = useMemo(() => {
@@ -301,13 +303,13 @@ export default function AdminPage() {
   return (
     <div className={styles.page}>
       <header className={styles.header}>
-        <a className={styles.brand} href="/" aria-label="Return to Planify home">
+        <Link className={styles.brand} href="/" aria-label="Return to Planify home">
           <BrandMark />
           <span>Planify</span>
           <small>Admin</small>
-        </a>
+        </Link>
         <div className={styles.headerActions}>
-          <a className={styles.siteLink} href="/">Public website</a>
+          <Link className={styles.siteLink} href="/">Public website</Link>
           <AuthControl />
         </div>
       </header>
