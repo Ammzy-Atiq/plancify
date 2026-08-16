@@ -164,6 +164,7 @@ test("keeps the Planify implementation accessible and starter-free", async () =>
   assert.match(authProvider, /getToken:\s*async/);
   assert.match(authControl, /<Show when="signed-out">/);
   assert.match(authControl, /<SignInButton mode="modal">/);
+  assert.match(authControl, /\.\.\.buttonProps/);
   assert.match(authControl, /<Show when="signed-in">/);
   assert.match(authControl, /<UserButton/);
   assert.doesNotMatch(authProvider + authControl, /signInWithOtp|onAuthStateChange/);

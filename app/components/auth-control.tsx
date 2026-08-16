@@ -1,12 +1,18 @@
 "use client";
 
 import { Show, SignInButton, UserButton } from "@clerk/react";
+import type { ComponentPropsWithoutRef } from "react";
 import { usePlanifyAuth } from "@/app/components/auth-provider";
 
-function SignInTrigger({ disabled = false }: { disabled?: boolean }) {
+function SignInTrigger({
+  className,
+  disabled = false,
+  ...buttonProps
+}: ComponentPropsWithoutRef<"button">) {
   return (
     <button
-      className="auth-trigger"
+      {...buttonProps}
+      className={["auth-trigger", className].filter(Boolean).join(" ")}
       type="button"
       aria-label="Sign in to Planify"
       disabled={disabled}
