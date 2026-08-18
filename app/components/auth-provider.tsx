@@ -1,12 +1,13 @@
 "use client";
 
 import { ClerkProvider, useAuth } from "@clerk/react";
-import { createContext, type ReactNode, useContext } from "react";
+import { createContext, type ReactNode, useContext, useMemo } from "react";
 
 type PlanifyAuthValue = {
   configured: boolean;
   isLoaded: boolean;
   isSignedIn: boolean;
+  userId: string | null;
   getToken: () => Promise<string | null>;
 };
 
@@ -14,23 +15,24 @@ const missingAuth: PlanifyAuthValue = {
   configured: false,
   isLoaded: true,
   isSignedIn: false,
+  userId: null,
   getToken: async () => null,
 };
 
 const PlanifyAuthContext = createContext<PlanifyAuthValue>(missingAuth);
 
 function ClerkSessionBridge({ children }: { children: ReactNode }) {
-  const { getToken, isLoaded, isSignedIn } = useAuth();
+  const { getToken, isLoaded, isSignedIn, userId } = useAuth();
+  const value = useMemo<PlanifyAuthValue>(() => ({
+    configured: true,
+    isLoaded,
+    isSignedIn: isSignedIn === true,
+    userId: userId ?? null,
+    getToken: async () => (isSignedIn ? getToken() : null),
+  }), [getToken, isLoaded, isSignedIn, userId]);
 
   return (
-    <PlanifyAuthContext.Provider
-      value={{
-        configured: true,
-        isLoaded,
-        isSignedIn: isSignedIn === true,
-        getToken: async () => (isSignedIn ? getToken() : null),
-      }}
-    >
+    <PlanifyAuthContext.Provider value={value}>
       {children}
     </PlanifyAuthContext.Provider>
   );
@@ -50,8 +52,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return (
     <ClerkProvider
       publishableKey={publishableKey}
-      signInFallbackRedirectUrl="/"
-      signUpFallbackRedirectUrl="/"
+      signInFallbackRedirectUrl="/dashboard"
+      signUpFallbackRedirectUrl="/dashboard"
       appearance={{
         variables: {
           borderRadius: "0.9rem",

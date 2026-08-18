@@ -129,7 +129,7 @@ test("server-renders the complete Plancify landing page and demo routes", async 
   }
 });
 
-test("keeps the Plancify experience complete, accessible, local-first, and starter-free", async () => {
+test("keeps the Plancify experience complete, accessible, persisted, and starter-free", async () => {
   const [
     css,
     page,
@@ -149,6 +149,17 @@ test("keeps the Plancify experience complete, accessible, local-first, and start
     adminCss,
     initialMigration,
     clerkIdentityMigration,
+    workspaceMigration,
+    schoolMigration,
+    mvpSchema,
+    workspaceRoute,
+    workspaceAdminRoute,
+    aiRoute,
+    serverAuth,
+    serverAdminAuth,
+    serverRateLimit,
+    serverAi,
+    loginPage,
     envExample,
   ] = await Promise.all([
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
@@ -169,18 +180,36 @@ test("keeps the Plancify experience complete, accessible, local-first, and start
     readFile(new URL("../app/admin/admin.module.css", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260817_create_early_access_signups.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260818_add_clerk_user_identity.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260818_create_student_workspaces.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260818_extend_school_enquiries.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/plancify_mvp_schema.sql", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/mvp/state/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/admin/workspaces/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/ai/guide/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/server-auth.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/server-admin-auth.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/server-rate-limit.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/server-ai.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/login/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../.env.example", import.meta.url), "utf8"),
   ]);
 
   assert.match(page, /Career planning for Classes 6-12/);
   assert.match(page, /Exploration before commitment/);
   assert.match(layout, /<DemoProvider>\{children\}<\/DemoProvider>/);
+  assert.match(layout, /<AuthProvider>/);
   assert.match(demoProvider, /toggleTask/);
   assert.match(demoProvider, /addPortfolioItem/);
+  assert.match(demoProvider, /localStorage\.setItem\(LOCAL_STORAGE_KEY/);
+  assert.match(demoProvider, /fetch\("\/api\/mvp\/state"/);
+  assert.match(demoProvider, /Synced to your account/);
+  assert.match(demoProvider, /saveQueueRef/);
+  assert.match(demoProvider, /queueCloudSave/);
   assert.match(appShell, /\/weekly-plan/);
   assert.match(appShell, /\/competitions/);
   assert.match(appShell, /AI Chat Guide/);
   assert.match(appShell, /What should I do next\?/);
+  assert.match(appShell, /fetch\("\/api\/ai\/guide"/);
   assert.match(demoData, /Software Engineer/);
   assert.match(demoData, /UX \/ Product Designer/);
   assert.match(demoData, /Robotics Engineer/);
@@ -195,30 +224,24 @@ test("keeps the Plancify experience complete, accessible, local-first, and start
   assert.match(dashboardPage, /Your portfolio is taking shape/);
   assert.match(competitionsPage, /Robotics/);
   assert.match(competitionsPage, /Medicine/);
-  assert.doesNotMatch(
-    demoProvider + appShell + demoData + onboardingPage + resultsPage + dashboardPage + competitionsPage,
-    /fetch\(|axios|XMLHttpRequest/,
-  );
+  assert.doesNotMatch(demoData + onboardingPage + resultsPage + dashboardPage + competitionsPage, /axios|XMLHttpRequest/);
   assert.match(adminPage, /fetch\("\/api\/admin\/early-access"/);
+  assert.match(adminPage, /fetch\("\/api\/admin\/workspaces"/);
   assert.match(adminPage, /Search email or school/);
-  assert.match(adminPage, /Every enquiry, in one clear view/);
+  assert.match(adminPage, /Students and enquiries, in one clear view/);
   assert.match(adminLayout, /index:\s*false/);
   assert.match(adminLayout, /images:\s*\[\]/);
-  assert.match(adminRoute, /ADMIN_CLERK_USER_IDS/);
-  assert.match(adminRoute, /authenticateRequest\(request/);
-  assert.match(adminRoute, /\.select\("id,email,audience,school_name,source,clerk_user_id,created_at"\)/);
+  assert.match(adminRoute, /authenticateAdministrator/);
+  assert.match(adminRoute, /checkRateLimit/);
+  assert.match(adminRoute, /contact_name,student_range/);
   assert.match(adminRoute, /\.limit\(500\)/);
   assert.doesNotMatch(adminPage + adminCss, /CLERK_SECRET_KEY|SUPABASE_SECRET_KEY|sb_secret_|sk_(?:test|live)_/);
   assert.doesNotMatch(adminCss, /(?:linear|radial|conic)-gradient\s*\(/i);
-  assert.match(route, /SUPABASE_SECRET_KEY/);
-  assert.match(route, /createClerkClient/);
-  assert.match(route, /CLERK_SECRET_KEY/);
-  assert.match(route, /CLERK_AUTHORIZED_PARTIES/);
-  assert.match(route, /authenticateRequest\(request/);
-  assert.match(route, /acceptsToken:\s*"session_token"/);
-  assert.match(route, /requestState\.toAuth\(\)/);
-  assert.match(route, /clerk\.users\.getUser\(userId\)/);
-  assert.match(route, /verifiedEmail === email \? userId : null/);
+  assert.match(route, /authenticateMvpRequest/);
+  assert.match(route, /createServerSupabase/);
+  assert.match(route, /checkRateLimit/);
+  assert.match(route, /\.upsert\(/);
+  assert.match(route, /defaultToNull:\s*false/);
   assert.doesNotMatch(route, /supabase\.auth\.|auth\.getUser\(token\)/);
   assert.doesNotMatch(
     page + demoProvider + appShell,
@@ -231,12 +254,63 @@ test("keeps the Plancify experience complete, accessible, local-first, and start
   assert.match(clerkIdentityMigration, /add column if not exists clerk_user_id text/i);
   assert.match(clerkIdentityMigration, /early_access_clerk_user_id_length/i);
   assert.match(clerkIdentityMigration, /early_access_signups_clerk_user_idx/i);
+  assert.match(workspaceMigration, /create table if not exists public\.student_workspaces/i);
+  assert.match(workspaceMigration, /enable row level security/i);
+  assert.match(workspaceMigration, /revoke all.+anon, authenticated/is);
+  assert.match(workspaceMigration, /clerk_user_id text primary key/i);
+  assert.match(schoolMigration, /add column if not exists contact_name text/i);
+  assert.match(schoolMigration, /add column if not exists student_range text/i);
+  assert.match(mvpSchema, /create table if not exists public\.early_access_signups/i);
+  assert.match(mvpSchema, /create table if not exists public\.student_workspaces/i);
+  assert.match(mvpSchema, /revoke all.+anon, authenticated/is);
+  assert.match(mvpSchema, /grant select, insert, update, delete.+service_role/is);
+  assert.match(mvpSchema, /alter table public\.student_workspaces enable row level security/i);
+  assert.match(mvpSchema, /create table if not exists private\.api_rate_limits/i);
+  assert.match(mvpSchema, /create or replace function public\.consume_api_rate_limit/i);
+  assert.match(mvpSchema, /grant execute on function public\.consume_api_rate_limit/i);
+  assert.match(mvpSchema, /updated_at timestamptz not null default now\(\)/i);
+  assert.match(workspaceRoute, /authenticateMvpRequest/);
+  assert.match(workspaceRoute, /\.upsert\(/);
+  assert.match(workspaceRoute, /onConflict: "clerk_user_id"/);
+  assert.match(workspaceAdminRoute, /authenticateAdministrator/);
+  assert.match(workspaceAdminRoute, /workspaceCompletion/);
+  assert.match(aiRoute, /generateAiGuideReply/);
+  assert.match(aiRoute, /configuredAiProviders/);
+  assert.match(aiRoute, /source: "local"/);
+  assert.match(aiRoute, /checkRateLimit/);
+  assert.match(serverAuth, /authorizedParties: configuredAuthorizedParties\(\)/);
+  assert.match(serverAuth, /acceptsToken:\s*"session_token"/);
+  assert.match(serverAuth, /clerk\.users\.getUser\(userId\)/);
+  assert.match(serverAdminAuth, /ADMIN_CLERK_USER_IDS/);
+  assert.match(serverAdminAuth, /ADMIN_EMAILS/);
+  assert.match(serverRateLimit, /consume_api_rate_limit/);
+  assert.match(serverRateLimit, /crypto\.subtle\.digest/);
+  assert.match(serverAi, /https:\/\/api\.openai\.com\/v1\/responses/);
+  assert.match(serverAi, /https:\/\/generativelanguage\.googleapis\.com\/v1beta\/models/);
+  assert.match(serverAi, /https:\/\/api\.anthropic\.com\/v1\/messages/);
+  assert.match(serverAi, /AI_PROVIDER_ORDER/);
+  assert.match(serverAi, /OPENAI_API_KEY/);
+  assert.match(serverAi, /GEMINI_API_KEY/);
+  assert.match(serverAi, /ANTHROPIC_API_KEY/);
+  assert.match(serverAi, /safety_identifier/);
+  assert.match(serverAi, /store: false/);
+  assert.match(serverAi, /for \(const provider of providerOrder\(\)\)/);
+  assert.doesNotMatch(loginPage, /name="password"|Demo only/);
   assert.match(envExample, /NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_your_publishable_key/);
   assert.match(envExample, /CLERK_SECRET_KEY=sk_test_your_server_only_key/);
   assert.match(envExample, /CLERK_AUTHORIZED_PARTIES=http:\/\/localhost:3000/);
   assert.match(envExample, /ADMIN_CLERK_USER_IDS=user_your_clerk_user_id/);
+  assert.match(envExample, /ADMIN_EMAILS=admin@example\.com/);
   assert.match(envExample, /SUPABASE_URL=https:\/\/your-project\.supabase\.co/);
   assert.match(envExample, /SUPABASE_SECRET_KEY=sb_secret_your_server_only_key/);
+  assert.match(envExample, /RATE_LIMIT_SALT=replace_with_a_long_random_server_secret/);
+  assert.match(envExample, /AI_PROVIDER_ORDER=openai,gemini,anthropic/);
+  assert.match(envExample, /OPENAI_API_KEY=sk-your_server_only_openai_key/);
+  assert.match(envExample, /OPENAI_MODEL=gpt-5\.6-luna/);
+  assert.match(envExample, /GEMINI_API_KEY=your_server_only_gemini_key/);
+  assert.match(envExample, /GEMINI_MODEL=gemini-3\.6-flash/);
+  assert.match(envExample, /ANTHROPIC_API_KEY=sk-ant-your_server_only_key/);
+  assert.match(envExample, /ANTHROPIC_MODEL=claude-haiku-4-5-20251001/);
   assert.doesNotMatch(envExample, /NEXT_PUBLIC_SUPABASE_/);
   assert.match(css, /:focus-visible/);
   assert.match(css, /prefers-reduced-motion:\s*reduce/);
@@ -277,6 +351,16 @@ test("admin page is sign-in gated and its API rejects anonymous requests", async
   assert.equal(apiResponse.status, 401);
   assert.equal(apiResponse.headers.get("cache-control"), "no-store");
   assert.match(apiResponse.headers.get("vary") ?? "", /(?:^|,\s*)Authorization(?:,|$)/);
+
+  for (const path of ["/api/admin/workspaces", "/api/mvp/state", "/api/ai/guide"]) {
+    const response = await requestApp(path, {
+      method: path === "/api/admin/workspaces" ? "GET" : path === "/api/mvp/state" ? "GET" : "POST",
+      headers: path === "/api/ai/guide" ? { "content-type": "application/json" } : undefined,
+      body: path === "/api/ai/guide" ? JSON.stringify({ prompt: "What next?" }) : undefined,
+    });
+    assert.equal(response.status, 401, `${path} should reject anonymous access`);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+  }
 });
 
 test("early-access API rejects unsafe input without contacting Supabase", async () => {
@@ -339,13 +423,19 @@ test("early-access API rejects unsafe input without contacting Supabase", async 
   assert.equal(tooLarge.status, 413);
 });
 
-test("server-only Clerk and Supabase secrets are absent from the client build", async () => {
+test("server-only authentication, database, and AI secrets are absent from the client build", async () => {
   const clientOutput = await collectTextFiles(new URL("../.next/static/", import.meta.url));
-  assert.doesNotMatch(clientOutput, /CLERK_SECRET_KEY|SUPABASE_SECRET_KEY/);
+  assert.doesNotMatch(clientOutput, /CLERK_SECRET_KEY|SUPABASE_SECRET_KEY|OPENAI_API_KEY|GEMINI_API_KEY|ANTHROPIC_API_KEY/);
 
   try {
     const localEnvironment = await readFile(new URL("../.env.local", import.meta.url), "utf8");
-    for (const variable of ["CLERK_SECRET_KEY", "SUPABASE_SECRET_KEY"]) {
+    for (const variable of [
+      "CLERK_SECRET_KEY",
+      "SUPABASE_SECRET_KEY",
+      "OPENAI_API_KEY",
+      "GEMINI_API_KEY",
+      "ANTHROPIC_API_KEY",
+    ]) {
       const secret = localEnvironment
         .match(new RegExp(`^${variable}=(.+)$`, "m"))?.[1]
         ?.trim();

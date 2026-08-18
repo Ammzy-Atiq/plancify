@@ -1,12 +1,19 @@
-import { createClerkClient } from "@clerk/backend";
-import { createClient } from "@supabase/supabase-js";
+import { authenticateMvpRequest, sameOriginRequest } from "@/app/lib/server-auth";
+import { checkRateLimit, rateLimitHeaders } from "@/app/lib/server-rate-limit";
+import { createServerSupabase } from "@/app/lib/server-supabase";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const STUDENT_RANGES = new Set(["Under 150", "150-300", "300-600", "600+"]);
+const MAX_BODY_BYTES = 8_192;
 
-function response(body: Record<string, unknown>, status = 200) {
+function response(
+  body: Record<string, unknown>,
+  status = 200,
+  headers?: Record<string, string>,
+) {
   return Response.json(body, {
     status,
-    headers: { "Cache-Control": "no-store" },
+    headers: { "Cache-Control": "no-store", ...headers },
   });
 }
 
@@ -16,25 +23,22 @@ function cleanText(value: unknown) {
 }
 
 export async function POST(request: Request) {
-  const origin = request.headers.get("origin");
-  if (origin && origin !== new URL(request.url).origin) {
+  if (!sameOriginRequest(request)) {
     return response({ error: "Cross-origin requests are not allowed." }, 403);
   }
-
-  const contentType = request.headers.get("content-type") ?? "";
-  if (!contentType.toLowerCase().includes("application/json")) {
+  if (!(request.headers.get("content-type") ?? "").toLowerCase().includes("application/json")) {
     return response({ error: "Send this request as JSON." }, 415);
   }
 
   const contentLength = Number(request.headers.get("content-length") ?? "0");
-  if (Number.isFinite(contentLength) && contentLength > 8_192) {
+  if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
     return response({ error: "This request is too large." }, 413);
   }
 
   let body: Record<string, unknown>;
   try {
     const rawBody = await request.text();
-    if (new TextEncoder().encode(rawBody).byteLength > 8_192) {
+    if (new TextEncoder().encode(rawBody).byteLength > MAX_BODY_BYTES) {
       return response({ error: "This request is too large." }, 413);
     }
     const parsed = JSON.parse(rawBody) as unknown;
@@ -53,97 +57,75 @@ export async function POST(request: Request) {
   const email = cleanText(body.email).toLowerCase();
   const audience = body.audience;
   const schoolName = cleanText(body.schoolName);
+  const contactName = cleanText(body.contactName);
+  const studentRange = cleanText(body.studentRange);
 
   if (email.length > 254 || !EMAIL_PATTERN.test(email)) {
     return response({ error: "Enter a valid email address." }, 400);
   }
-
   if (audience !== "family" && audience !== "school") {
     return response({ error: "Choose parent or guardian, or school." }, 400);
   }
-
   if (audience === "school" && (schoolName.length < 2 || schoolName.length > 160)) {
     return response({ error: "Enter your school name." }, 400);
   }
+  if (audience === "school" && (contactName.length < 2 || contactName.length > 100)) {
+    return response({ error: "Enter your name." }, 400);
+  }
+  if (audience === "school" && !STUDENT_RANGES.has(studentRange)) {
+    return response({ error: "Choose an approximate student range." }, 400);
+  }
 
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const secretKey = process.env.SUPABASE_SECRET_KEY;
-  if (!supabaseUrl || !secretKey) {
+  const rateLimit = await checkRateLimit({
+    request,
+    scope: "early-access",
+    limit: 12,
+    windowSeconds: 3_600,
+  });
+  if (!rateLimit.allowed) {
+    return response(
+      { error: "Too many requests were sent from this connection. Try again later.", code: "rate_limited" },
+      429,
+      rateLimitHeaders(rateLimit),
+    );
+  }
+
+  let clerkUserId: string | undefined;
+  if (request.headers.has("authorization")) {
+    const authentication = await authenticateMvpRequest(request);
+    if (!authentication.ok) {
+      return response(
+        { error: authentication.error, code: authentication.code },
+        authentication.status,
+      );
+    }
+    if (authentication.user.email === email) clerkUserId = authentication.user.userId;
+  }
+
+  const supabase = createServerSupabase();
+  if (!supabase) {
     return response({ error: "Early access is not configured yet." }, 503);
   }
 
-  const supabase = createClient(supabaseUrl, secretKey, {
-    auth: {
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-      persistSession: false,
-    },
-  });
-
-  let clerkUserId: string | null = null;
-  const authorization = request.headers.get("authorization");
-  if (authorization) {
-    const token = authorization.match(/^Bearer\s+(.+)$/i)?.[1];
-    if (!token) return response({ error: "The account session is not valid." }, 401);
-
-    const clerkSecretKey = process.env.CLERK_SECRET_KEY;
-    const clerkPublishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
-    if (!clerkSecretKey || !clerkPublishableKey) {
-      return response({ error: "Account verification is not configured yet." }, 503);
-    }
-
-    const authorizedParties = (
-      process.env.CLERK_AUTHORIZED_PARTIES ?? "http://localhost:3000"
-    )
-      .split(",")
-      .map((party) => party.trim())
-      .filter(Boolean);
-    const clerk = createClerkClient({
-      secretKey: clerkSecretKey,
-      publishableKey: clerkPublishableKey,
-    });
-    const requestState = await clerk.authenticateRequest(request, {
-      acceptsToken: "session_token",
-      authorizedParties,
-    });
-
-    if (!requestState.isAuthenticated) {
-      return response({ error: "Your account session has expired. Sign in again and retry." }, 401);
-    }
-
-    const { userId } = requestState.toAuth();
-    if (!userId) {
-      return response({ error: "Your account session has expired. Sign in again and retry." }, 401);
-    }
-
-    try {
-      const clerkUser = await clerk.users.getUser(userId);
-      const verifiedEmail = clerkUser.emailAddresses
-        .find((address) => address.id === clerkUser.primaryEmailAddressId)
-        ?.emailAddress.trim()
-        .toLowerCase();
-      clerkUserId = verifiedEmail === email ? userId : null;
-    } catch {
-      // A valid public request can still be saved when Clerk's profile API is unavailable.
-      clerkUserId = null;
-    }
-  }
-
-  const { error } = await supabase.from("early_access_signups").insert({
+  const now = new Date().toISOString();
+  const { error } = await supabase.from("early_access_signups").upsert({
     audience,
     email,
     school_name: audience === "school" ? schoolName : null,
-    source: "planify-local-site",
-    clerk_user_id: clerkUserId,
+    contact_name: audience === "school" ? contactName : null,
+    student_range: audience === "school" ? studentRange : null,
+    source: "planify-site",
+    updated_at: now,
+    ...(clerkUserId ? { clerk_user_id: clerkUserId } : {}),
+  }, {
+    onConflict: "email,audience",
+    ignoreDuplicates: false,
+    defaultToNull: false,
   });
 
-  if (error?.code === "23505") {
-    return response({ ok: true });
-  }
-
   if (error) {
-    console.error("Supabase early-access insert failed", { code: error.code });
-    const setupRequired = error.code === "42P01" || error.code === "PGRST205";
+    console.error("Supabase early-access upsert failed", { code: error.code });
+    const setupRequired = error.code === "42P01" || error.code === "PGRST205" || error.code === "PGRST204";
     return response(
       {
         error: setupRequired
@@ -154,5 +136,5 @@ export async function POST(request: Request) {
     );
   }
 
-  return response({ ok: true }, 201);
+  return response({ ok: true }, 200);
 }

@@ -148,7 +148,7 @@
 .stats {
   margin-top: 54px;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 12px;
 }
 
@@ -191,6 +191,11 @@
 .stats article:nth-child(3) {
   border-color: #addbbb;
   background: #e8f8ec;
+}
+
+.stats article:nth-child(4) {
+  border-color: #f1c5b9;
+  background: #fff1ed;
 }
 
 .panel {

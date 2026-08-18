@@ -1,22 +1,21 @@
 import type { Metadata } from "next";
-import { AuthProvider } from "@/app/components/auth-provider";
 
 export const metadata: Metadata = {
   title: "Admin",
-  description: "Private Planify early-access administration.",
+  description: "Private Plancify MVP administration.",
   robots: {
     index: false,
     follow: false,
     noarchive: true,
   },
   openGraph: {
-    title: "Planify Admin",
-    description: "Private Planify early-access administration.",
+    title: "Plancify Admin",
+    description: "Private Plancify MVP administration.",
     images: [],
   },
   twitter: {
-    title: "Planify Admin",
-    description: "Private Planify early-access administration.",
+    title: "Plancify Admin",
+    description: "Private Plancify MVP administration.",
     images: [],
   },
 };
@@ -24,5 +23,5 @@ export const metadata: Metadata = {
 export default function AdminLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  return <AuthProvider>{children}</AuthProvider>;
+  return children;
 }

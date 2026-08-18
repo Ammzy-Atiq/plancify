@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import { AuthProvider } from "@/app/components/auth-provider";
 import { DemoProvider } from "@/app/components/demo-provider";
 import "./globals.css";
 
@@ -60,7 +61,9 @@ export default function RootLayout({
   return (
     <html lang="en" data-scroll-behavior="smooth">
       <body>
-        <DemoProvider>{children}</DemoProvider>
+        <AuthProvider>
+          <DemoProvider>{children}</DemoProvider>
+        </AuthProvider>
       </body>
     </html>
   );
