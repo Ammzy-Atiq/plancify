@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AuthControl } from "@/app/components/auth-control";
 import { usePlanifyAuth } from "@/app/components/auth-provider";
+import { careers } from "@/app/lib/demo-data";
 import styles from "./admin.module.css";
 
 type SignupRecord = {
@@ -12,9 +13,26 @@ type SignupRecord = {
   email: string;
   audience: "family" | "school";
   schoolName: string | null;
+  contactName: string | null;
+  studentRange: string | null;
   source: string;
   hasAccount: boolean;
   createdAt: string;
+};
+
+type WorkspaceRecord = {
+  clerkUserId: string;
+  email: string | null;
+  studentName: string;
+  classLevel: number;
+  selectedCareerId: string;
+  completion: {
+    taskProgress: number;
+    discoveryProgress: number;
+    portfolioCount: number;
+  };
+  createdAt: string;
+  updatedAt: string;
 };
 
 type LoadState =
@@ -43,6 +61,7 @@ function BrandMark() {
 export default function AdminPage() {
   const { configured, getToken, isLoaded, isSignedIn } = usePlanifyAuth();
   const [records, setRecords] = useState<SignupRecord[]>([]);
+  const [workspaces, setWorkspaces] = useState<WorkspaceRecord[]>([]);
   const [loadState, setLoadState] = useState<LoadState>("idle");
   const [message, setMessage] = useState("");
   const [search, setSearch] = useState("");
@@ -60,29 +79,43 @@ export default function AdminPage() {
         return;
       }
 
-      const response = await fetch("/api/admin/early-access", {
-        headers: { Authorization: `Bearer ${token}` },
-        cache: "no-store",
-      });
-      const payload = (await response.json().catch(() => ({}))) as {
+      const [enquiryResponse, workspaceResponse] = await Promise.all([
+        fetch("/api/admin/early-access", {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        }),
+        fetch("/api/admin/workspaces", {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        }),
+      ]);
+      const enquiryPayload = (await enquiryResponse.json().catch(() => ({}))) as {
         records?: SignupRecord[];
         error?: string;
         code?: string;
       };
+      const workspacePayload = (await workspaceResponse.json().catch(() => ({}))) as {
+        records?: WorkspaceRecord[];
+        error?: string;
+        code?: string;
+      };
 
-      if (!response.ok) {
-        if (response.status === 403) setLoadState("forbidden");
-        else if (payload.code === "admin_not_configured") setLoadState("unconfigured");
+      const failedResponse = !enquiryResponse.ok ? enquiryResponse : !workspaceResponse.ok ? workspaceResponse : null;
+      const failedPayload = !enquiryResponse.ok ? enquiryPayload : !workspaceResponse.ok ? workspacePayload : null;
+      if (failedResponse && failedPayload) {
+        if (failedResponse.status === 403) setLoadState("forbidden");
+        else if (failedPayload.code === "admin_not_configured") setLoadState("unconfigured");
         else if (
-          payload.code === "database_setup_required" ||
-          payload.code === "database_not_configured"
+          failedPayload.code === "database_setup_required" ||
+          failedPayload.code === "database_not_configured"
         ) setLoadState("setup");
         else setLoadState("error");
-        setMessage(payload.error ?? "The admin panel could not load.");
+        setMessage(failedPayload.error ?? "The admin panel could not load.");
         return;
       }
 
-      setRecords(payload.records ?? []);
+      setRecords(enquiryPayload.records ?? []);
+      setWorkspaces(workspacePayload.records ?? []);
       setLoadState("ready");
     } catch {
       setLoadState("error");
@@ -108,7 +141,15 @@ export default function AdminPage() {
     });
   }, [audience, records, search]);
 
-  const familyCount = records.filter((record) => record.audience === "family").length;
+  const filteredWorkspaces = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return workspaces.filter((record) => {
+      const career = careers.find((item) => item.id === record.selectedCareerId)?.title ?? record.selectedCareerId;
+      return !query || [record.studentName, record.email ?? "", career]
+        .some((value) => value.toLowerCase().includes(query));
+    });
+  }, [search, workspaces]);
+
   const schoolCount = records.filter((record) => record.audience === "school").length;
 
   const accessContent = () => {
@@ -166,9 +207,9 @@ export default function AdminPage() {
               : "The admin panel could not load.";
       const detail =
         loadState === "unconfigured"
-          ? "Create or sign in to a Clerk account, then add its User ID to the administrator allowlist."
+          ? "Add the approved Clerk User ID or account email to the server administrator allowlist."
           : loadState === "setup"
-            ? "Run the included early-access migrations in the Supabase SQL Editor, then refresh this page."
+            ? "Run the included plancify_mvp_schema.sql file in the Supabase SQL Editor, then refresh this page."
             : message;
 
       return (
@@ -189,9 +230,9 @@ export default function AdminPage() {
       <main className={styles.main}>
         <section className={styles.intro}>
           <div>
-            <span className={styles.eyebrow}>Early-access administration</span>
-            <h1>Every enquiry, in one clear view.</h1>
-            <p>Review parent and school interest without exposing this information on the public website.</p>
+            <span className={styles.eyebrow}>MVP administration</span>
+            <h1>Students and enquiries, in one clear view.</h1>
+            <p>Review authenticated student workspaces and school interest without exposing private data publicly.</p>
           </div>
           <button className={styles.refreshButton} type="button" onClick={loadRecords}>
             Refresh data
@@ -205,15 +246,48 @@ export default function AdminPage() {
             <small>All saved contacts</small>
           </article>
           <article>
-            <span>Parents and guardians</span>
-            <strong>{familyCount}</strong>
-            <small>Family early access</small>
+            <span>Student workspaces</span>
+            <strong>{workspaces.length}</strong>
+            <small>Authenticated student accounts</small>
+          </article>
+          <article>
+            <span>Weekly actions</span>
+            <strong>{workspaces.length ? Math.round(workspaces.reduce((total, item) => total + item.completion.taskProgress, 0) / workspaces.length) : 0}%</strong>
+            <small>Average completion</small>
           </article>
           <article>
             <span>Schools</span>
             <strong>{schoolCount}</strong>
             <small>Pilot requests</small>
           </article>
+        </section>
+
+        <section className={styles.panel} aria-labelledby="students-title">
+          <div className={styles.panelHeader}>
+            <div><span className={styles.panelLabel}>Product activity</span><h2 id="students-title">Student workspaces</h2></div>
+            <span className={styles.resultCount}>{filteredWorkspaces.length} shown</span>
+          </div>
+          {filteredWorkspaces.length === 0 ? (
+            <div className={styles.emptyState}><span aria-hidden="true" /><h3>No student workspaces yet.</h3><p>A workspace appears after a signed-in student opens the product.</p></div>
+          ) : (
+            <div className={styles.tableWrap}>
+              <table>
+                <thead><tr><th scope="col">Student</th><th scope="col">Class</th><th scope="col">Goal</th><th scope="col">Weekly plan</th><th scope="col">Portfolio</th><th scope="col">Last active</th></tr></thead>
+                <tbody>
+                  {filteredWorkspaces.map((record) => (
+                    <tr key={record.clerkUserId}>
+                      <td><strong>{record.studentName}</strong><br /><span className={styles.muted}>{record.email ?? "Email unavailable"}</span></td>
+                      <td>Class {record.classLevel}</td>
+                      <td>{careers.find((career) => career.id === record.selectedCareerId)?.title ?? record.selectedCareerId}</td>
+                      <td>{record.completion.taskProgress}%</td>
+                      <td>{record.completion.portfolioCount} items</td>
+                      <td><time dateTime={record.updatedAt}>{dateFormatter.format(new Date(record.updatedAt))}</time></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
 
         <section className={styles.panel} aria-labelledby="enquiries-title">
@@ -271,13 +345,13 @@ export default function AdminPage() {
                 <tbody>
                   {filteredRecords.map((record) => (
                     <tr key={record.id}>
-                      <td><a href={`mailto:${record.email}`}>{record.email}</a></td>
+                      <td><a href={`mailto:${record.email}`}>{record.email}</a>{record.contactName ? <><br /><span className={styles.muted}>{record.contactName}</span></> : null}</td>
                       <td>
                         <span className={`${styles.audienceBadge} ${record.audience === "school" ? styles.schoolBadge : styles.familyBadge}`}>
                           {record.audience === "school" ? "School" : "Parent or guardian"}
                         </span>
                       </td>
-                      <td>{record.schoolName || <span className={styles.muted}>Not provided</span>}</td>
+                      <td>{record.schoolName || <span className={styles.muted}>Not provided</span>}{record.studentRange ? <><br /><span className={styles.muted}>{record.studentRange} students</span></> : null}</td>
                       <td>
                         <span className={styles.accountState}>
                           <i className={record.hasAccount ? styles.connected : ""} aria-hidden="true" />
@@ -305,7 +379,7 @@ export default function AdminPage() {
       <header className={styles.header}>
         <Link className={styles.brand} href="/" aria-label="Return to Planify home">
           <BrandMark />
-          <span>Planify</span>
+          <span>Plancify</span>
           <small>Admin</small>
         </Link>
         <div className={styles.headerActions}>

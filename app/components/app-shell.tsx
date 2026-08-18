@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useState } from "react";
+import { AuthControl } from "@/app/components/auth-control";
+import { usePlanifyAuth } from "@/app/components/auth-provider";
 import { useDemo } from "@/app/components/demo-provider";
 
 const navigation = [
@@ -19,7 +21,7 @@ const navigation = [
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const { studentName, selectedCareer } = useDemo();
+  const { answers, studentName, selectedCareer, syncMessage, syncStatus } = useDemo();
 
   return (
     <div className="app-frame">
@@ -35,7 +37,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </span>
           <span>
             <strong>{studentName}</strong>
-            <small>Class 8 · {selectedCareer.cluster}</small>
+            <small>Class {answers.classLevel} · {selectedCareer.cluster}</small>
           </span>
         </div>
 
@@ -66,10 +68,11 @@ export function AppShell({ children }: { children: ReactNode }) {
             <strong>{selectedCareer.title}</strong>
           </div>
           <div className="topbar-actions">
-            <span className="level-pill">Level 8 explorer</span>
-            <Link className="avatar-button" href="/login" aria-label="Open profile">
-              {studentName.slice(0, 1).toUpperCase()}
-            </Link>
+            <button className={`workspace-sync ${syncStatus}`} type="button" title={syncMessage}>
+              <i aria-hidden="true" />
+              <span>{syncMessage}</span>
+            </button>
+            <AuthControl />
           </div>
         </header>
 
@@ -97,6 +100,7 @@ type ChatMessage = { from: "guide" | "student"; text: string };
 
 function ChatGuide() {
   const [open, setOpen] = useState(false);
+  const [thinking, setThinking] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       from: "guide",
@@ -104,10 +108,11 @@ function ChatGuide() {
     },
   ]);
   const { selectedCareer, completedTaskIds } = useDemo();
+  const { configured, getToken, isSignedIn } = usePlanifyAuth();
 
   const prompts = ["What should I do next?", "How am I doing?", "Suggest a project"];
 
-  function answerPrompt(prompt: string) {
+  function localReply(prompt: string) {
     const normalized = prompt.toLowerCase();
     let reply = `Your ${selectedCareer.title} roadmap is ready. Start with one small action and use what you learn to adjust the plan.`;
     if (normalized.includes("next")) {
@@ -117,11 +122,40 @@ function ChatGuide() {
     } else if (normalized.includes("project")) {
       reply = `Try a “Study Sprint Timer” in Python. It fits your ${selectedCareer.title} goal and practises functions, loops, and clear user instructions.`;
     }
+    return reply;
+  }
+
+  async function answerPrompt(prompt: string) {
+    if (thinking) return;
     setMessages((current) => [
       ...current,
       { from: "student", text: prompt },
-      { from: "guide", text: reply },
     ]);
+    setThinking(true);
+
+    let reply = localReply(prompt);
+    if (configured && isSignedIn) {
+      try {
+        const token = await getToken();
+        if (token) {
+          const response = await fetch("/api/ai/guide", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ prompt }),
+          });
+          const payload = (await response.json().catch(() => ({}))) as { reply?: string };
+          if (response.ok && payload.reply) reply = payload.reply;
+        }
+      } catch {
+        // The local, goal-aware response keeps the guide reliable if AI is unavailable.
+      }
+    }
+
+    setMessages((current) => [...current, { from: "guide", text: reply }]);
+    setThinking(false);
   }
 
   return (
@@ -130,17 +164,18 @@ function ChatGuide() {
         <section className="chat-panel" role="dialog" aria-label="Plancify AI Chat Guide">
           <header>
             <span className="chat-orb" aria-hidden="true">AI</span>
-            <span><strong>Plancify Guide</strong><small>Goal-aware demo assistant</small></span>
+            <span><strong>Plancify Guide</strong><small>{configured && isSignedIn ? "AI with local fallback" : "Goal-aware local guide"}</small></span>
             <button type="button" onClick={() => setOpen(false)} aria-label="Close chat guide">×</button>
           </header>
           <div className="chat-messages" aria-live="polite">
             {messages.map((message, index) => (
               <p className={message.from} key={`${message.from}-${index}`}>{message.text}</p>
             ))}
+            {thinking ? <p className="guide chat-thinking">Thinking...</p> : null}
           </div>
           <div className="chat-prompts">
             {prompts.map((prompt) => (
-              <button type="button" key={prompt} onClick={() => answerPrompt(prompt)}>{prompt}</button>
+              <button type="button" key={prompt} disabled={thinking} onClick={() => void answerPrompt(prompt)}>{prompt}</button>
             ))}
           </div>
         </section>

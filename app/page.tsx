@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AuthControl } from "@/app/components/auth-control";
 import { featureCards } from "@/app/lib/demo-data";
 
 const problems = [
@@ -46,7 +47,7 @@ export default function HomePage() {
           <Link href="/for-schools">For schools</Link>
         </nav>
         <div className="marketing-actions">
-          <Link className="text-link" href="/login">Login</Link>
+          <AuthControl />
           <Link className="button button-lime button-small" href="/onboarding">Get started</Link>
         </div>
       </header>

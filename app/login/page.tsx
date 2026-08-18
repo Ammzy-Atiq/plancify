@@ -1,17 +1,20 @@
 "use client";
 
+import { Show, SignInButton, SignUpButton } from "@clerk/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
+import { usePlanifyAuth } from "@/app/components/auth-provider";
 import { useDemo } from "@/app/components/demo-provider";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { configured, isSignedIn } = usePlanifyAuth();
   const { resetDemo, setStudentName, updateAnswers } = useDemo();
   const [error, setError] = useState("");
 
   function continueAsDemo() {
-    resetDemo();
+    if (!isSignedIn) resetDemo();
     router.push("/dashboard");
   }
 
@@ -19,11 +22,9 @@ export default function LoginPage() {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     const name = String(data.get("name") ?? "").trim();
-    const email = String(data.get("email") ?? "").trim();
-    const password = String(data.get("password") ?? "").trim();
     const classLevel = String(data.get("classLevel") ?? "8");
-    if (!name || !email || !password) {
-      setError("Fill in the three fields so we know where to begin.");
+    if (!name) {
+      setError("Enter your name so we know where to begin.");
       return;
     }
     setStudentName(name.split(" ")[0]);
@@ -40,7 +41,7 @@ export default function LoginPage() {
         <div>
           <p className="eyebrow lime">Your future workspace</p>
           <h1>Start with curiosity. <span>Leave with a next step.</span></h1>
-          <p>Everything in this competition demo runs locally with pre-filled data, so you can explore without waiting.</p>
+          <p>Explore locally as a guest, or sign in to keep your progress safely synced across devices.</p>
         </div>
         <div className="auth-story-steps">
           <span><b>01</b> Discover what fits</span>
@@ -58,7 +59,24 @@ export default function LoginPage() {
             Continue as Demo Student <span aria-hidden="true">GO</span>
           </button>
 
-          <div className="or-divider"><span>or make your own demo profile</span></div>
+          {configured ? (
+            <div className="real-account-actions">
+              <Show when="signed-out">
+                <SignUpButton mode="modal">
+                  <button className="button button-dark" type="button">Create a real account</button>
+                </SignUpButton>
+                <SignInButton mode="modal">
+                  <button className="button button-ghost" type="button">Sign in</button>
+                </SignInButton>
+              </Show>
+              <Show when="signed-in">
+                <Link className="button button-dark wide-button" href="/dashboard">Open my saved workspace</Link>
+              </Show>
+              <small>Signed-in progress syncs securely across devices.</small>
+            </div>
+          ) : null}
+
+          <div className="or-divider"><span>or continue without an account</span></div>
 
           <form onSubmit={submitForm}>
             <label>
@@ -66,31 +84,21 @@ export default function LoginPage() {
               <input name="name" placeholder="e.g. Aarav Sharma" autoComplete="name" />
             </label>
             <label>
-              Email
-              <input name="email" type="email" placeholder="you@example.com" autoComplete="email" />
+              Class
+              <select name="classLevel" defaultValue="8">
+                {Array.from({ length: 7 }, (_, index) => String(index + 6)).map((item) => (
+                  <option key={item} value={item}>Class {item}</option>
+                ))}
+              </select>
             </label>
-            <div className="form-two-col">
-              <label>
-                Class
-                <select name="classLevel" defaultValue="8">
-                  {Array.from({ length: 7 }, (_, index) => String(index + 6)).map((item) => (
-                    <option key={item} value={item}>Class {item}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Password
-                <input name="password" type="password" placeholder="Demo only" autoComplete="new-password" />
-              </label>
-            </div>
             <label className="trust-check">
               <input type="checkbox" defaultChecked />
               <span>A parent or guardian will need to confirm a real account.</span>
             </label>
             {error ? <p className="form-error" role="alert">{error}</p> : null}
-            <button className="button button-dark wide-button" type="submit">Create demo profile</button>
+            <button className="button button-dark wide-button" type="submit">Create guest profile</button>
           </form>
-          <small className="demo-note">Prototype only. No account is created and nothing is uploaded.</small>
+          <small className="demo-note">Guest profiles stay on this device. Use Clerk sign-in above for a real synced account.</small>
         </div>
       </section>
     </main>

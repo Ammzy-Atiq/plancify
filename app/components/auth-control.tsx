@@ -1,6 +1,7 @@
 "use client";
 
 import { Show, SignInButton, UserButton } from "@clerk/react";
+import Link from "next/link";
 import type { ComponentPropsWithoutRef } from "react";
 import { usePlanifyAuth } from "@/app/components/auth-provider";
 
@@ -14,13 +15,10 @@ function SignInTrigger({
       {...buttonProps}
       className={["auth-trigger", className].filter(Boolean).join(" ")}
       type="button"
-      aria-label="Sign in to Planify"
+      aria-label="Sign in to Plancify"
       disabled={disabled}
     >
-      <span
-        className="auth-trigger-icon direction-icon direction-up-right"
-        aria-hidden="true"
-      />
+      <span className="auth-trigger-icon" aria-hidden="true">IN</span>
       <span>{disabled ? "Loading" : "Sign in"}</span>
     </button>
   );
@@ -29,7 +27,11 @@ function SignInTrigger({
 export function AuthControl() {
   const { configured, isLoaded } = usePlanifyAuth();
 
-  if (!configured || !isLoaded) {
+  if (!configured) {
+    return <Link className="auth-trigger" href="/login"><span>Demo access</span></Link>;
+  }
+
+  if (!isLoaded) {
     return <SignInTrigger disabled />;
   }
 
@@ -42,7 +44,7 @@ export function AuthControl() {
       </Show>
 
       <Show when="signed-in">
-        <div className="clerk-user-control" aria-label="Planify account">
+        <div className="clerk-user-control" aria-label="Plancify account">
           <UserButton
             appearance={{
               elements: {

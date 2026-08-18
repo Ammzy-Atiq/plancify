@@ -51,17 +51,29 @@ Every logged-in-style product route uses the same persistent sidebar and goal-aw
 - Card, progress, toast, selection, and page-entry micro-interactions
 - No CSS gradients; reduced-motion and keyboard-focus support are included
 
-## Optional Clerk, Supabase, and admin setup
+## Clerk, Supabase, AI, and admin setup
 
-The competition demo does not require a backend. The existing early-access API and read-only admin panel remain available as an optional, separate system.
+Signed-in student workspaces, enquiries, and the admin panel use the application backend. Guest exploration still works locally in the browser.
 
 1. Copy `.env.example` to `.env.local`.
-2. Configure the Clerk publishable key, server secret, exact `CLERK_AUTHORIZED_PARTIES`, and `ADMIN_CLERK_USER_IDS`.
+2. Configure the Clerk publishable key, server secret, exact `CLERK_AUTHORIZED_PARTIES`, and either `ADMIN_CLERK_USER_IDS` or `ADMIN_EMAILS`.
 3. Configure the server-only Supabase URL and secret.
-4. Run these Supabase migrations in order:
-   - `supabase/migrations/20260817_create_early_access_signups.sql`
-   - `supabase/migrations/20260818_add_clerk_user_identity.sql`
-5. Open `/admin` and sign in with an allowlisted Clerk user.
+4. Set `RATE_LIMIT_SALT` to a long random server secret.
+5. In the Supabase SQL Editor, paste and run `supabase/plancify_mvp_schema.sql`. It contains the complete, rerunnable MVP schema, server-only grants, and durable API rate limiter.
+6. Optionally configure one or more AI providers: `OPENAI_API_KEY`, `GEMINI_API_KEY`, and `ANTHROPIC_API_KEY`. Set each matching `*_MODEL` variable to any model ID supported by that provider.
+7. Open `/admin` and sign in with an allowlisted Clerk user.
+
+For deployment, add the same variables to the hosting provider. Set `CLERK_AUTHORIZED_PARTIES` to a comma-separated list of exact origins, for example `http://localhost:3000,https://problem-the-indian-education-system.vercel.app`. Do not include paths or a trailing slash. The Clerk dashboard must also allow the production origin.
+
+### Backend behavior
+
+- Guests can explore with device-local progress and do not enter a fake password.
+- Clerk-authenticated students load and save one Supabase workspace keyed by their verified Clerk user ID.
+- Family and school forms upsert into `early_access_signups`, so a repeated submission refreshes the stored details without creating duplicates.
+- `/admin` verifies the Clerk session and server-side administrator allowlist before returning enquiries or student progress.
+- The enquiry, workspace, admin, and AI routes are throttled. Supabase provides the durable counter; an in-memory guard protects an individual server instance if the counter is temporarily unavailable.
+- The guide always has a local response. Configure `AI_PROVIDER_ORDER` with any order of `openai`, `gemini`, and `anthropic` (the aliases `google` and `claude` also work). The server tries only providers with keys, one at a time, and fails over to the next provider before using the local response. `AI_PROVIDER_TIMEOUT_MS` is clamped between 3 and 15 seconds per provider.
+- Model IDs are server-controlled through `OPENAI_MODEL`, `GEMINI_MODEL`, and `ANTHROPIC_MODEL`; students cannot choose an expensive model from the browser.
 
 Never expose `CLERK_SECRET_KEY` or `SUPABASE_SECRET_KEY` to browser code. Rotate any server secret that has been pasted into chat or another message before production use.
 

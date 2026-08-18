@@ -5,9 +5,34 @@ import { type FormEvent, useState } from "react";
 
 export default function ForSchoolsPage() {
   const [sent, setSent] = useState(false);
-  function submit(event: FormEvent<HTMLFormElement>) {
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setSent(true);
+    setSubmitting(true);
+    setError("");
+    const form = new FormData(event.currentTarget);
+    try {
+      const response = await fetch("/api/early-access", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          audience: "school",
+          contactName: String(form.get("contactName") ?? ""),
+          schoolName: String(form.get("schoolName") ?? ""),
+          email: String(form.get("email") ?? ""),
+          studentRange: String(form.get("studentRange") ?? ""),
+          website: String(form.get("website") ?? ""),
+        }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) throw new Error(payload.error ?? "The enquiry could not be saved.");
+      setSent(true);
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "The enquiry could not be saved.");
+    } finally {
+      setSubmitting(false);
+    }
   }
   return (
     <main className="schools-page">
@@ -43,14 +68,16 @@ export default function ForSchoolsPage() {
       </section>
 
       <section className="school-contact" id="school-contact">
-        <div><p className="eyebrow lime">Pilot conversation</p><h2>Bring Plancify to your students.</h2><p>This form is a local mock for the competition demo. It shows the school-enquiry experience without sending any data.</p></div>
-        {sent ? <div className="school-form-success" role="status"><span>✓</span><h3>Demo enquiry complete.</h3><p>In a live product, the Plancify school team would follow up here.</p><button className="button button-ghost" type="button" onClick={() => setSent(false)}>Reset demo form</button></div> : (
+        <div><p className="eyebrow lime">Pilot conversation</p><h2>Bring Plancify to your students.</h2><p>Tell us about your school. The enquiry is stored securely for an approved Plancify administrator to review.</p></div>
+        {sent ? <div className="school-form-success" role="status"><span>✓</span><h3>Enquiry received.</h3><p>The Plancify school team can now review your pilot request.</p><button className="button button-ghost" type="button" onClick={() => setSent(false)}>Send another enquiry</button></div> : (
           <form onSubmit={submit}>
-            <label>Your name<input required placeholder="School leader or counsellor" /></label>
-            <label>School name<input required placeholder="Your school" /></label>
-            <label>Email<input required type="email" placeholder="you@school.edu" /></label>
-            <label>Students<select defaultValue="150-300"><option>Under 150</option><option>150-300</option><option>300-600</option><option>600+</option></select></label>
-            <button className="button button-lime wide-button" type="submit">Complete demo enquiry</button>
+            <label>Your name<input name="contactName" required placeholder="School leader or counsellor" /></label>
+            <label>School name<input name="schoolName" required placeholder="Your school" /></label>
+            <label>Email<input name="email" required type="email" placeholder="you@school.edu" /></label>
+            <label>Students<select name="studentRange" defaultValue="150-300"><option>Under 150</option><option>150-300</option><option>300-600</option><option>600+</option></select></label>
+            <label className="form-honeypot" aria-hidden="true">Website<input name="website" tabIndex={-1} autoComplete="off" /></label>
+            {error ? <p className="form-error" role="alert">{error}</p> : null}
+            <button className="button button-lime wide-button" type="submit" disabled={submitting}>{submitting ? "Saving enquiry..." : "Request a pilot"}</button>
           </form>
         )}
       </section>
