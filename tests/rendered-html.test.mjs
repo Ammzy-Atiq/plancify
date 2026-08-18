@@ -80,7 +80,7 @@ async function collectTextFiles(directory) {
   return files.flat(Infinity).join("\n");
 }
 
-test("server-renders the complete Planify landing page", async () => {
+test("server-renders the complete Plancify landing page and demo routes", async () => {
   const response = await requestApp("/", {
     headers: { accept: "text/html" },
   });
@@ -88,35 +88,61 @@ test("server-renders the complete Planify landing page", async () => {
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>Planify — Discover\. Try\. Reflect\. Plan\.<\/title>/i);
-  assert.match(html, /Your future isn’t a test result\./);
-  assert.match(html, /Clarity is built, not delivered\./);
+  assert.match(html, /<title>Plancify - Better decisions start with better exploration\.<\/title>/i);
+  assert.match(html, /Figure out what you actually want to be\./);
+  assert.match(html, /Starting now, not in Class 12\./);
   assert.match(html, /id="how-it-works"/);
-  assert.match(html, /id="roadmap"/);
-  assert.match(html, /id="early-access"/);
-  assert.match(html, /class="theme-toggle"/);
-  assert.match(html, /class="auth-trigger/);
-  assert.match(html, /aria-label="Sign in to Planify"/);
-  assert.match(html, /class="interest-form"/);
-  assert.match(html, /Join early access/);
-  assert.match(html, /Switch to dark theme/);
-  assert.doesNotMatch(html, /data-left-dock-card|data-impact-card|data-sequence-group/);
+  assert.match(html, /id="features"/);
+  assert.match(html, /How Plancify works/);
+  assert.match(html, /Skill Tracker/);
+  assert.match(html, /Weekly Action Plan/);
+  assert.match(html, /Portfolio Builder/);
+  assert.match(html, /Competition Calendar/);
+  assert.match(html, /AI Chat Guide/);
+  assert.match(html, /href="\/onboarding"/);
+  assert.match(html, /href="\/dashboard"/);
+  assert.match(html, /No student data is collected in the demo/);
   assert.match(html, /property="og:image"/);
   assert.match(html, /\/og\.png/);
   assert.doesNotMatch(html, /react-loading-skeleton|Building your site/i);
-  assert.doesNotMatch(html, /Nothing was sent or stored|Interactive demo only/i);
-  assert.doesNotMatch(html, /[↗→↓←↑↘↙]/);
+
+  const demoRoutes = [
+    "/login",
+    "/onboarding",
+    "/results",
+    "/goal",
+    "/dashboard",
+    "/roadmap",
+    "/skills",
+    "/weekly-plan",
+    "/portfolio",
+    "/competitions",
+    "/resources",
+    "/community",
+    "/mentors",
+    "/for-schools",
+  ];
+  for (const path of demoRoutes) {
+    const routeResponse = await requestApp(path, { headers: { accept: "text/html" } });
+    assert.equal(routeResponse.status, 200, `${path} should render`);
+    assert.match(routeResponse.headers.get("content-type") ?? "", /^text\/html\b/i);
+  }
 });
 
-test("keeps the Planify implementation accessible and starter-free", async () => {
+test("keeps the Plancify experience complete, accessible, local-first, and starter-free", async () => {
   const [
     css,
     page,
     layout,
     packageJson,
     route,
-    authProvider,
-    authControl,
+    demoProvider,
+    appShell,
+    demoData,
+    onboardingPage,
+    resultsPage,
+    dashboardPage,
+    competitionsPage,
     adminPage,
     adminLayout,
     adminRoute,
@@ -130,8 +156,13 @@ test("keeps the Planify implementation accessible and starter-free", async () =>
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
     readFile(new URL("../app/api/early-access/route.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/components/auth-provider.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/components/auth-control.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/demo-provider.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/app-shell.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/demo-data.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/onboarding/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/results/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/competitions/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/admin/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/admin/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/admin/early-access/route.ts", import.meta.url), "utf8"),
@@ -141,34 +172,33 @@ test("keeps the Planify implementation accessible and starter-free", async () =>
     readFile(new URL("../.env.example", import.meta.url), "utf8"),
   ]);
 
-  assert.match(page, /role="progressbar"/);
-  assert.match(page, /aria-live="polite"/);
-  assert.match(page, /Parent or guardian/);
-  assert.match(page, /prefers-reduced-motion: reduce/);
-  assert.match(page, /data-motion-card/);
-  assert.match(page, /data-sky-card/);
-  assert.match(page, /className="truth-grid" data-reveal data-group-reveal/);
-  assert.match(page, /className="loop-grid" data-reveal data-group-reveal/);
-  assert.match(page, /className="roadmap-track" data-reveal data-group-reveal/);
+  assert.match(page, /Career planning for Classes 6-12/);
+  assert.match(page, /Exploration before commitment/);
+  assert.match(layout, /<DemoProvider>\{children\}<\/DemoProvider>/);
+  assert.match(demoProvider, /toggleTask/);
+  assert.match(demoProvider, /addPortfolioItem/);
+  assert.match(appShell, /\/weekly-plan/);
+  assert.match(appShell, /\/competitions/);
+  assert.match(appShell, /AI Chat Guide/);
+  assert.match(appShell, /What should I do next\?/);
+  assert.match(demoData, /Software Engineer/);
+  assert.match(demoData, /UX \/ Product Designer/);
+  assert.match(demoData, /Robotics Engineer/);
+  assert.match(onboardingPage, /Which of these sound most fun to you\?/);
+  assert.match(onboardingPage, /Which subjects do you enjoy most\?/);
+  assert.match(onboardingPage, /Which subjects do you enjoy least\?/);
+  assert.match(onboardingPage, /Have you already been thinking about a career\?/);
+  assert.match(onboardingPage, /How do you like to learn\?/);
+  assert.match(onboardingPage, /What class are you in\?/);
+  assert.match(resultsPage, /Choose this goal/);
+  assert.match(dashboardPage, /This week/i);
+  assert.match(dashboardPage, /Your portfolio is taking shape/);
+  assert.match(competitionsPage, /Robotics/);
+  assert.match(competitionsPage, /Medicine/);
   assert.doesNotMatch(
-    page,
-    /data-impact-card|data-left-dock-card|data-sequence-group|impact-burst|finishSequenceGroup/,
+    demoProvider + appShell + demoData + onboardingPage + resultsPage + dashboardPage + competitionsPage,
+    /fetch\(|axios|XMLHttpRequest/,
   );
-  assert.match(page, /planify-theme/);
-  assert.match(page, /fetch\("\/api\/early-access"/);
-  assert.match(page, /type="submit"/);
-  assert.match(layout, /<AuthProvider>\{children\}<\/AuthProvider>/);
-  assert.match(authProvider, /ClerkProvider/);
-  assert.match(authProvider, /useAuth\(\)/);
-  assert.match(authProvider, /NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY/);
-  assert.match(authProvider, /getToken:\s*async/);
-  assert.match(authControl, /<Show when="signed-out">/);
-  assert.match(authControl, /<SignInButton mode="modal">/);
-  assert.match(authControl, /\.\.\.buttonProps/);
-  assert.match(authControl, /<Show when="signed-in">/);
-  assert.match(authControl, /<UserButton/);
-  assert.doesNotMatch(authProvider + authControl, /signInWithOtp|onAuthStateChange/);
-  assert.doesNotMatch(page + authControl, /[↗→↓←↑↘↙]/);
   assert.match(adminPage, /fetch\("\/api\/admin\/early-access"/);
   assert.match(adminPage, /Search email or school/);
   assert.match(adminPage, /Every enquiry, in one clear view/);
@@ -191,7 +221,7 @@ test("keeps the Planify implementation accessible and starter-free", async () =>
   assert.match(route, /verifiedEmail === email \? userId : null/);
   assert.doesNotMatch(route, /supabase\.auth\.|auth\.getUser\(token\)/);
   assert.doesNotMatch(
-    page + authProvider + authControl,
+    page + demoProvider + appShell,
     /CLERK_SECRET_KEY|SUPABASE_SECRET_KEY|sk_(?:test|live)_|sb_secret_/,
   );
   assert.match(initialMigration, /clerk_user_id text/i);
@@ -210,11 +240,9 @@ test("keeps the Planify implementation accessible and starter-free", async () =>
   assert.doesNotMatch(envExample, /NEXT_PUBLIC_SUPABASE_/);
   assert.match(css, /:focus-visible/);
   assert.match(css, /prefers-reduced-motion:\s*reduce/);
-  assert.match(css, /@keyframes sky-land/);
-  assert.match(css, /@keyframes clean-group-rise/);
-  assert.doesNotMatch(css, /sequence-scroll-locked/);
-  assert.doesNotMatch(css, /tech-scan/);
-  assert.match(css, /html\[data-theme="dark"\]/);
+  assert.match(css, /@keyframes card-land/);
+  assert.match(css, /@keyframes app-page-in/);
+  assert.match(css, /@keyframes confetti-fall/);
   assert.doesNotMatch(css, /(?:linear|radial|conic)-gradient\s*\(/i);
   assert.match(layout, /generateMetadata/);
   assert.match(layout, /\/og\.png/);
@@ -225,7 +253,7 @@ test("keeps the Planify implementation accessible and starter-free", async () =>
   assert.match(packageJson, /"build": "next build"/);
   assert.doesNotMatch(packageJson, /vinext|wrangler|@cloudflare\/vite-plugin/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
-  assert.doesNotMatch(page, /SkeletonPreview|Student or parent/);
+  assert.doesNotMatch(page, /SkeletonPreview|Student or parent|Join early access/);
 
   await assert.rejects(
     access(new URL("../app/_sites-preview/", import.meta.url)),

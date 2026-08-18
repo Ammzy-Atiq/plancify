@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { AuthProvider } from "@/app/components/auth-provider";
 
 export const metadata: Metadata = {
   title: "Admin",
@@ -23,5 +24,5 @@ export const metadata: Metadata = {
 export default function AdminLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  return children;
+  return <AuthProvider>{children}</AuthProvider>;
 }

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { AuthProvider } from "@/app/components/auth-provider";
+import { DemoProvider } from "@/app/components/demo-provider";
 import "./globals.css";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -17,11 +17,11 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     metadataBase: new URL(origin),
     title: {
-      default: "Planify — Discover. Try. Reflect. Plan.",
-      template: "%s · Planify",
+      default: "Plancify - Better decisions start with better exploration.",
+      template: "%s · Plancify",
     },
     description:
-      "Career exploration for Indian students: discover promising directions, try real activities, and build a flexible 90-day roadmap.",
+      "An interactive career-planning and skill-building demo for Indian school students in Classes 6-12.",
     icons: {
       icon: "/favicon.svg",
       shortcut: "/favicon.svg",
@@ -29,24 +29,24 @@ export async function generateMetadata(): Promise<Metadata> {
     openGraph: {
       type: "website",
       url: origin,
-      siteName: "Planify",
-      title: "Planify — Your future isn’t a test result.",
+      siteName: "Plancify",
+      title: "Plancify - Start exploring your future now.",
       description:
-        "Discover promising directions, try real career activities, and build a living roadmap before making a high-stakes choice.",
+        "Discover your interests, choose a goal, build skills, and collect proof of progress.",
       images: [
         {
           url: `${origin}/og.png`,
           width: 1731,
           height: 909,
-          alt: "Planify — Your future isn’t a test result.",
+          alt: "Plancify career exploration platform",
         },
       ],
     },
     twitter: {
       card: "summary_large_image",
-      title: "Planify — Your future isn’t a test result.",
+      title: "Plancify - Better decisions start with better exploration.",
       description:
-        "Discover, try, reflect, and build a career roadmap grounded in real evidence.",
+        "An interactive career-planning and skill-building demo for Classes 6-12.",
       images: [`${origin}/og.png`],
     },
   };
@@ -58,17 +58,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <head>
-        <script
-          dangerouslySetInnerHTML={{
-            __html:
-              "try{var t=localStorage.getItem('planify-theme')==='dark'?'dark':'light';document.documentElement.dataset.theme=t;document.documentElement.style.colorScheme=t}catch(e){document.documentElement.dataset.theme='light'}",
-          }}
-        />
-      </head>
+    <html lang="en" data-scroll-behavior="smooth">
       <body>
-        <AuthProvider>{children}</AuthProvider>
+        <DemoProvider>{children}</DemoProvider>
       </body>
     </html>
   );

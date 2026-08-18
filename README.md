@@ -1,6 +1,8 @@
-# Planify
+# Plancify
 
-A modern, responsive launch website for Planify—an exploration platform that helps Indian students discover promising career directions, try real activities, and build a flexible roadmap.
+Plancify is an interactive career-exploration and skill-building prototype for Indian school students in Classes 6–12. It helps a student discover what fits, choose a direction, receive a class-aware roadmap, practise relevant skills, and collect proof of progress.
+
+The core product is designed for a reliable 90-second competition demo. Discovery, recommendations, progress, chat responses, and student data all run from local mock state—no live API, AI service, account, or database is required.
 
 ## Run locally
 
@@ -13,61 +15,61 @@ npm run dev
 
 Open `http://localhost:3000`.
 
-## Clerk and Supabase setup
+## Presentation paths
 
-Planify uses Clerk for accounts and Supabase only for server-side early-access storage. The public landing page remains available without an account.
+Full journey:
+
+1. `/` — product story and starting point
+2. `/onboarding` — six-question discovery flow
+3. `/results` — rules-based three-career shortlist
+4. `/goal` — celebratory goal confirmation
+5. `/dashboard` — populated student home
+6. `/roadmap` → `/skills` → `/weekly-plan` → `/portfolio`
+
+Fast path: open `/login` and choose **Continue as Demo Student**. This goes straight to the fully populated dashboard.
+
+## Product routes
+
+- `/dashboard` — current goal, progress, weekly actions, skills, portfolio, and streak
+- `/roadmap` — Class 8 through Class 12 staged plan
+- `/skills` — five-level skill tracker with next-level requirements
+- `/weekly-plan` — three completable weekly actions and progress feedback
+- `/portfolio` — seeded proof of projects, competitions, and certificates
+- `/competitions` — filterable competition calendar
+- `/resources` — career-specific curated learning resources
+- `/community` — field-based groups and recent posts
+- `/mentors` — mentor directory with mock connection actions
+- `/for-schools` — school licensing and pilot-program page
+
+Every logged-in-style product route uses the same persistent sidebar and goal-aware local AI Chat Guide.
+
+## Design direction
+
+- Near-black marketing surfaces with solid purple and lime brand accents
+- Warm off-white, lavender, and bright card surfaces inside the student product
+- Rounded display typography, readable body copy, generous spacing, and large targets
+- Card, progress, toast, selection, and page-entry micro-interactions
+- No CSS gradients; reduced-motion and keyboard-focus support are included
+
+## Optional Clerk, Supabase, and admin setup
+
+The competition demo does not require a backend. The existing early-access API and read-only admin panel remain available as an optional, separate system.
 
 1. Copy `.env.example` to `.env.local`.
-2. Add the Clerk publishable key and server-only secret key. Keep `CLERK_AUTHORIZED_PARTIES=http://localhost:3000` for local development.
-3. Add the Supabase project URL and server-only secret key.
-4. In the Supabase SQL Editor, run these migrations in order:
+2. Configure the Clerk publishable key, server secret, exact `CLERK_AUTHORIZED_PARTIES`, and `ADMIN_CLERK_USER_IDS`.
+3. Configure the server-only Supabase URL and secret.
+4. Run these Supabase migrations in order:
    - `supabase/migrations/20260817_create_early_access_signups.sql`
    - `supabase/migrations/20260818_add_clerk_user_identity.sql`
+5. Open `/admin` and sign in with an allowlisted Clerk user.
 
-For a deployed environment, replace `CLERK_AUTHORIZED_PARTIES` with the exact public site origin. Multiple trusted origins can be supplied as a comma-separated list; never derive this allowlist from the incoming request.
-
-The first migration creates a fresh private `early_access_signups` table, including its optional Clerk user ID, constraints, indexes, row-level security, and revoked browser roles. The second migration is idempotent and upgrades a table created before Clerk was introduced by adding the Clerk identity column, constraint, and index. It is safe to run both for a fresh setup.
-
-`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` is intentionally available to the browser. `CLERK_SECRET_KEY` and `SUPABASE_SECRET_KEY` are server-only and must never use a `NEXT_PUBLIC_` or `VITE_` prefix. `SUPABASE_URL` is also consumed only by the server route in this project.
-
-Before production, rotate any server key that has been shared in chat or another message, then place the replacement directly in `.env.local` or the deployment secret manager. Do not paste replacement secrets into source code, commits, screenshots, or chat.
-
-The header mounts Clerk's modal sign-in and account controls. When a signed-in visitor submits the early-access form, the browser attaches a short-lived Clerk session token. The API verifies that token with `@clerk/backend`, checks it against `CLERK_AUTHORIZED_PARTIES`, and associates the Clerk user ID only when the account's primary email matches the submitted email. Anonymous enquiries are still accepted.
-
-## Admin panel
-
-The private admin panel is available at `http://localhost:3000/admin`. It shows the saved email, audience, school name, account connection, and submission date, with search, audience filtering, totals, and a manual refresh action.
-
-Admin access uses a deny-by-default Clerk allowlist:
-
-1. Create or sign in to the Clerk account that should be the administrator.
-2. In **Clerk Dashboard → Users**, copy that account's User ID.
-3. Add it to `ADMIN_CLERK_USER_IDS` in `.env.local`. Multiple administrator IDs can be comma-separated.
-4. Restart the local site and open `/admin`.
-
-The browser never receives the Supabase secret or Clerk secret. The admin API verifies the Clerk session and administrator allowlist on every request, then returns a read-only list capped at 500 recent enquiries.
-
-Supabase authentication is not used. The API performs the database insert with the server-only Supabase secret, while row-level security and revoked `anon` and `authenticated` privileges prevent direct browser access to the table.
-
-Before exposing the endpoint publicly, add a durable edge rate limit or a managed challenge such as Cloudflare Turnstile. The local endpoint already enforces same-origin requests, strict validation, a body-size cap, and a honeypot, but those controls are not a substitute for production abuse protection.
+Never expose `CLERK_SECRET_KEY` or `SUPABASE_SECRET_KEY` to browser code. Rotate any server secret that has been pasted into chat or another message before production use.
 
 ## Validate
 
 ```bash
 npm run lint
-npm run build
-node --test tests/rendered-html.test.mjs
+npm test
 ```
 
-## What is included
-
-- Responsive, single-page product narrative for students, parents, and schools
-- Animated product preview, exploration loop, and six-week roadmap
-- Transparent recommendation and privacy principles
-- Accessible navigation, controls, focus states, and reduced-motion support
-- Dynamic Open Graph and Twitter metadata with a custom social card
-- Interactive audience views, mobile menu, FAQ, and persistent early-access form
-- Clerk modal sign-in, session-aware UI, and account management
-- Clerk session verification with an explicit authorized-party allowlist
-- A server-only Supabase write route with validation and duplicate-safe responses
-- A Clerk-protected, read-only admin panel for reviewing early-access enquiries
+The regression suite builds the production app, verifies every demo route, checks the local-first discovery experience, validates the protected admin/API behavior, and scans the client output for server-secret leakage.
